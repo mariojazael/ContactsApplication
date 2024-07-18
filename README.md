@@ -1,8 +1,10 @@
-Contacts app
+# Contacts app
 
 This application serves as a contact manager administrator. Inside of it, we can add, update, search for or
 delete records. We can add two kind of records: persons and organizations. Whenever we adding records we will
 be asked for the type of record to be added; then the suitable fields will asked to be filled.
+
+## Application's structure
 
 The application's structure was designed to work with polymorphism since it is needed to add multiple type of
 entities. inside "Contacts (Java)/task/src/contacts/models" we will find the following file classes:
@@ -25,13 +27,15 @@ separate factory for every entity was created, using a common interface for both
 | `OrganizationsFactory` | This class implements the `AbstractFactory` interface and provides custom logic for creating `Organization` instances.                                                                                                                                                                                                    |
 | `ContactsApp`          | This class manages the services available to users, including displaying a menu and handling user interactions.                                                                                                                                                                                                           |
 
+## User interaction
+
 The ContactsApp class displays a menu that looks like this:
 
-[menu] Enter action (add, list, search, count, exit):
+`[menu] Enter action (add, list, search, count, exit):`
 
 If we enter the add option, we will be asked to set the type of entity we want to create and then all the
 required fields will be requested to fill. number, gender and birthdate fields have an extra validation. In
-case the values doesn't pass the validation, the value will be set to "[no data]".
+case any value doesn't pass the validation, its value will be set to "[no data]".
 
 In list case, all the records will be listed and then we will be able to edit, delete records or go back.
 

@@ -1,4 +1,4 @@
-package src.Services;
+package src.Validators;
 
 public class PhoneNumberValidator implements Validator {
     @Override

@@ -1,20 +1,21 @@
 package src.Models;
 
-import src.ContactsApp;
+import static src.Services.DateFormaterService.getFormattedCurrentDate;
 
-public class AbstractEntity {
+public abstract class AbstractEntity {
+    // this variable provides identification numbers for any instance of classes that extend this AbstractEntity
+    public static int count = 1;
     private int id;
     private String name;
     private String number;
     String timeCreated;
     String timeLastModified;
-    public static int count = 1;
 
     public AbstractEntity(int id, String name, String number) {
         this.id = id;
         this.name = name;
         this.number = number;
-        String time = ContactsApp.getFormattedCurrentDate();
+        String time = getFormattedCurrentDate();
         this.timeCreated = time;
         this.timeLastModified = time;
     }

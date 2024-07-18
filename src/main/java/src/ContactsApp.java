@@ -1,12 +1,18 @@
 package src;
 
+import src.Factories.AbstractFactory;
+import src.Factories.ContactsFactory;
+import src.Factories.OrganizationsFactory;
 import src.Models.AbstractEntity;
 import src.Models.Contact;
-import src.Services.*;
+import src.Validators.BirthdateValidator;
+import src.Validators.GenderValidator;
+import src.Validators.PhoneNumberValidator;
+
+import static src.MenuOptions.*;
+import static src.Services.DateFormaterService.getFormattedCurrentDate;
 
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,13 +27,20 @@ public class ContactsApp {
     private final PhoneNumberValidator phoneNumberValidator = new PhoneNumberValidator();
     private final GenderValidator genderValidator = new GenderValidator();
     private final BirthdateValidator birthdateValidator = new BirthdateValidator();
+    private static final String PERSON = "person";
+    private static final String ORGANIZATION = "organization";
 
     public void start() {
         boolean flag = true;
         while (flag) {
             showMenu();
-            flag = switchInput(Scanner.nextLine(), Optional.empty());
+            MenuOptions option = askForOption();
+            flag = switchInput(option, Optional.empty());
         }
+    }
+
+    private MenuOptions askForOption() {
+        return MenuOptions.valueOf(Scanner.nextLine().toUpperCase());
     }
 
     private void showSuccessAddMessage() {
@@ -47,7 +60,7 @@ public class ContactsApp {
     }
 
     private String[] askForInfo(String type) {
-        if(type.equals("person")) {
+        if(type.equals(PERSON)) {
             String[] contactInfo = new String[5];
             System.out.println("Enter the name: ");
             contactInfo[0] = Scanner.nextLine();
@@ -60,7 +73,7 @@ public class ContactsApp {
             System.out.println("Enter the number: ");
             contactInfo[4] = Scanner.nextLine();
             return contactInfo;
-        } else if(type.equals("organization")) {
+        } else if(type.equals(ORGANIZATION)) {
             String[] orgInfo = new String[3];
             System.out.println("Enter the organization name: ");
             orgInfo[0] = Scanner.nextLine();
@@ -78,16 +91,15 @@ public class ContactsApp {
     }
 
     private AbstractFactory<? extends AbstractEntity> solveEntity(String type) {
-        return type.equals("person") ? contactsFactory : organizationsFactory;
+        return type.equals(PERSON) ? contactsFactory : organizationsFactory;
     }
 
-    private boolean switchInput(String stringOption, Optional<Integer> optionalId) {
-        Options option = Options.valueOf(stringOption.toUpperCase());
+    private boolean switchInput(MenuOptions option, Optional<Integer> optionalId) {
         return switch (option) {
             case ADD -> add();
-            case LIST -> list(stringOption);
+            case LIST -> list(option);
             case EDIT -> edit(optionalId);
-            case SEARCH -> search(stringOption);
+            case SEARCH -> search(option);
             case REMOVE -> remove(optionalId);
             case COUNT -> count();
             case EXIT -> false;
@@ -104,10 +116,11 @@ public class ContactsApp {
         return true;
     }
 
-    private boolean list(String input) {
+    private boolean list(MenuOptions option) {
         listRecords();
         int id = Integer.parseInt(askForDesiredId());
-        processId(input, id);
+        id = findActualId(id);
+        processId(option, id);
         return true;
     }
 
@@ -135,16 +148,16 @@ public class ContactsApp {
         return true;
     }
 
-    private boolean search(String option) {
-        String query = askForSearchQuery();
+    private boolean search(MenuOptions option) {
+        String query = askForSearchQuery( );
         searchWithQuery(query).ifPresentOrElse(results -> {
             showResults(results);
-            String action = askForAction(option);
-            if(!action.equals("back") && !action.equals("again")) {
-                int id = Integer.parseInt(action);
+            AtomicReference<Object> action = new AtomicReference<>(askForAction(option));
+            if(!action.get().equals(BACK) && !action.get().equals(AGAIN)) {
+                int id = (int) action.get();
                 id = findActualId(results, id);
-                processId("edit", id);
-            } else if(action.equals("again")) switchInput("search", Optional.empty());
+                processId(EDIT, id);
+            } else if(action.get().equals(AGAIN)) switchInput(SEARCH, Optional.empty());
         }, () -> System.out.println("No record found.\n"));
         return true;
     }
@@ -163,7 +176,6 @@ public class ContactsApp {
         return true;
     }
 
-
     private boolean count() {
         System.out.println("The phone book has " + Records.size() + " records.\n");
         return true;
@@ -175,7 +187,7 @@ public class ContactsApp {
     }
 
     private void validateInfo(String[] info, String type) {
-        if(type.equals("person")) {
+        if(type.equals(PERSON)) {
             if(!phoneNumberValidator.validate(info[4])) {
                 System.out.println("Wrong number format!");
                 info[4] = "[no number]";
@@ -188,7 +200,7 @@ public class ContactsApp {
                 System.out.println("Bad gender!");
                 info[3] = "[no data]";
             }
-        } else if(type.equals("organization")) {
+        } else if(type.equals(ORGANIZATION)) {
             if (!phoneNumberValidator.validate(info[4])) {
                 System.out.println("Wrong number format!");
                 info[2] = "[no number]";
@@ -196,16 +208,35 @@ public class ContactsApp {
         }
     }
 
-    private void processId(String input, int id) {
-        AtomicReference<String> action = new AtomicReference<>("");
-        final AtomicBoolean flag = new AtomicBoolean(true);
+    /*
+        This procedure allows to perform editing and deleting operations on a single record as much as we
+        want to. It takes a menu option as first parameter that will help to figure out what the
+        available actions for us are. This method calls a method 'askForAction' that is intended to be reused
+        by multiple business logic operations; that is the reason why it is needed to determine what we are
+        pretending to do. In this case, the 'processId' method is supposed to work with one record since the
+        second parameter is an id, so the 'option' parameter will show the actions available when it comes about
+        processing one single id.
+     */
+    private void processId(MenuOptions option, int id) {
         getRecordById(id).ifPresentOrElse(record -> {
+            AtomicReference<MenuOptions> action = new AtomicReference<>(null);
+            final AtomicBoolean flag = new AtomicBoolean(true);
             do {
                 System.out.println(record);
-                action.set(askForAction(input));
-                flag.set(action.get().equals("edit") ? switchInput("edit", Optional.of(id)) :
-                        action.get().equals("delete") ? switchInput("remove", Optional.of(id)) :
-                                !action.get().equals("menu") && !action.get().equals("back"));
+                action.set((MenuOptions) askForAction(option));
+                switch (action.get()) {
+                    case EDIT : {
+                        flag.set(switchInput(EDIT, Optional.of(id)));
+                        break;
+                    }
+                    // It is pretended to set flag to false either DELETE or MENU is selected, so 'break' statement can be bypassed in this case.
+                    case DELETE : switchInput(REMOVE, Optional.of(id));
+                    case MENU : {
+                        flag.set(false);
+                        break;
+                    }
+                    case DEFAULT: System.out.println("Invalid action!");
+                }
             } while(flag.get());
             System.out.println();
         }, () -> System.out.println("No record found.\n"));
@@ -213,6 +244,10 @@ public class ContactsApp {
 
     private int findActualId(List<AbstractEntity> results, int id) {
         return results.get(id - 1).getId();
+    }
+
+    private int findActualId(int id) {
+        return findActualId(Records, id);
     }
 
     private void showResults(List<AbstractEntity> results) {
@@ -254,10 +289,30 @@ public class ContactsApp {
         return id;
     }
 
-    private String askForAction(String menu) {
-        if(menu.equals("list") || menu.equals("edit")) System.out.println("[record] Enter action (edit, delete, menu):");
-        else if(menu.equals("search")) System.out.println("[search] Enter action ([number], back, again):");
-        return Scanner.nextLine();
+    private Object askForAction(MenuOptions option) {
+        switch(option) {
+            case EDIT :
+            case LIST : {
+                System.out.println("[record] Enter action (edit, delete, menu):");
+                break;
+            }
+            case SEARCH: {
+                System.out.println("[search] Enter action ([number], back, again):");
+                break;
+            }
+            default: {
+                System.out.println("Bad option!");
+                break;
+            }
+        }
+        String action = Scanner.nextLine();
+        int id;
+        try {
+            id = Integer.parseInt(action);
+        } catch (NumberFormatException e) {
+            return MenuOptions.valueOf(action.toUpperCase());
+        }
+        return id;
     }
 
     private String askForSearchQuery() {
@@ -273,7 +328,7 @@ public class ContactsApp {
     private void listRecords() {
         int i = 1;
         for(AbstractEntity record : Records) {
-            if(!AbstractFactory.validatePhoneNumber(record.getNumber())) record.setNumber("[no number]");
+            if(!phoneNumberValidator.validate(record.getNumber())) record.setNumber("[no number]");
             System.out.println(i++ + ". " + record.getName() + ", " + record.getNumber());
         }
     }
@@ -284,7 +339,9 @@ public class ContactsApp {
     }
 
     private Optional<AbstractEntity> getRecordById(int id) {
-        return Optional.ofNullable(Records.get(id));
+        return Records.stream()
+                .filter(record -> record.getId() == id)
+                .findFirst();
     }
 
     private Field askForDesiredField(Class<? extends AbstractEntity> entityClass) {
@@ -315,11 +372,5 @@ public class ContactsApp {
     public String askForFieldValue(Field field) {
         System.out.println("Enter " + field.getName() + ": ");
         return Scanner.nextLine();
-    }
-
-    public static String getFormattedCurrentDate() {
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
-        return now.format(formatter);
     }
 }
